@@ -186,6 +186,8 @@ CLASS ZCL_UPDOWNCI IMPLEMENTATION.
 
     CREATE OBJECT go_xml.
 
+    go_xml->write_description( lo_variant->text ).
+
     LOOP AT lo_variant->variant ASSIGNING <ls_variant>
         WHERE testname IN it_class.                     "#EC CI_HASHSEQ
 
@@ -207,11 +209,12 @@ CLASS ZCL_UPDOWNCI IMPLEMENTATION.
 
   METHOD create_from_xml.
 
-    DATA: lt_variant    TYPE sci_tstvar,
-          lo_variant    TYPE REF TO cl_ci_checkvariant,
-          li_attributes TYPE REF TO if_ixml_node,
-          lv_testname   TYPE sci_tstval-testname,
-          lv_version    TYPE sci_tstval-version.
+    DATA: lt_variant     TYPE sci_tstvar,
+          lo_variant     TYPE REF TO cl_ci_checkvariant,
+          lv_description TYPE sci_text,
+          li_attributes  TYPE REF TO if_ixml_node,
+          lv_testname    TYPE sci_tstval-testname,
+          lv_version     TYPE sci_tstval-version.
 
 
     lo_variant = zcl_updownci_variant=>read(
@@ -224,6 +227,8 @@ CLASS ZCL_UPDOWNCI IMPLEMENTATION.
     CREATE OBJECT go_xml
       EXPORTING
         iv_xml = iv_xml.
+
+    lv_description = go_xml->read_description( ).
 
     go_xml->read_variant(
       IMPORTING
@@ -262,7 +267,10 @@ CLASS ZCL_UPDOWNCI IMPLEMENTATION.
     ENDWHILE.
 
     IF iv_test = abap_false.
-      lo_variant->save( lt_variant ).
+      lo_variant->save(
+        EXPORTING
+          p_variant = lt_variant
+          p_text    = lv_description ).
     ELSE.
       lo_variant->leave_change( ).
     ENDIF.
@@ -274,6 +282,8 @@ CLASS ZCL_UPDOWNCI IMPLEMENTATION.
 
     DATA: lt_components  TYPE cl_abap_structdescr=>component_table,
           lo_type        TYPE REF TO cl_abap_typedescr,
+          lo_test        TYPE REF TO cl_ci_test_root,
+          lo_objectdescr TYPE REF TO cl_abap_objectdescr,
           lo_structdescr TYPE REF TO cl_abap_structdescr.
 
     FIELD-SYMBOLS: <ls_component> LIKE LINE OF lt_components,
@@ -296,10 +306,27 @@ CLASS ZCL_UPDOWNCI IMPLEMENTATION.
         EXCEPTIONS
           type_not_found = 1
           OTHERS         = 2 ).
-      <ls_component>-type ?= lo_type.
-      IF sy-subrc <> 0.
-        <ls_component>-type ?= cl_abap_typedescr=>describe_by_name( |{ iv_class }=>{ <ls_type>-type }| ).
+
+      IF sy-subrc <> 0. " typically rasied by class pool declared types
+
+        CREATE OBJECT lo_test TYPE (iv_class).
+        lo_objectdescr ?= cl_abap_typedescr=>describe_by_object_ref( lo_test ).
+
+        lo_objectdescr->get_attribute_type(
+          EXPORTING
+            p_name              = <ls_type>-name
+          RECEIVING
+            p_descr_ref         = lo_type
+          EXCEPTIONS
+            attribute_not_found = 1 ).
+
+        IF sy-subrc <> 0.
+          RAISE EXCEPTION TYPE zcx_updownci_exception EXPORTING iv_text = 'error creating structure'.
+        ENDIF.
+
       ENDIF.
+
+      <ls_component>-type ?= lo_type.
 
     ENDLOOP.
 
@@ -376,24 +403,6 @@ CLASS ZCL_UPDOWNCI IMPLEMENTATION.
         lv_type = <ls_attr>-type.
       ENDIF.
 
-      IF lv_type IS INITIAL.
-        IF iv_class = 'CL_WDY_CI_TEST_CONVENTIONS'.
-          lv_type = 'TY_WDY_CI_TEST_CONVENTIONS'.
-        ELSE.
-          lv_type = 'ABAP_BOOL'.
-        ENDIF.
-      ENDIF.
-
-      IF lv_name = 'M_OPTION' AND lv_field = 'SCAN_WEB_DYNPRO'.
-* special handling for CL_CI_TEST_ABAP_NAMING_NEW
-        lv_type = 'ABAP_BOOL'.
-      ENDIF.
-
-      IF lv_name = 'CASE'.
-* special handling for CL_CI_TEST_PRETTY_PRINT
-        lv_type = 'TY_T_CASE'.
-      ENDIF.
-
       APPEND INITIAL LINE TO rt_types ASSIGNING <ls_type>.
       <ls_type>-parameter = <ls_parameter>-name.
       <ls_type>-name = lv_name.
@@ -442,7 +451,7 @@ CLASS ZCL_UPDOWNCI IMPLEMENTATION.
       ENDIF.
 
 * special handling for CL_SAUNIT_LEGACY_CI_CHECK
-      REPLACE FIRST OCCURRENCE OF 'me->' IN lv_source WITH ''.
+      REPLACE FIRST OCCURRENCE OF 'me->' IN lv_source WITH '' IGNORING CASE.
 
       IF NOT <ls_parameter> IS ASSIGNED.
         APPEND INITIAL LINE TO rt_parameters ASSIGNING <ls_parameter>.

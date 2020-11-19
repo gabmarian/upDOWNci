@@ -4,27 +4,43 @@ CLASS zcl_updownci_xml DEFINITION
   CREATE PUBLIC .
 
   PUBLIC SECTION.
-    METHODS:
-      constructor
-        IMPORTING iv_xml TYPE string OPTIONAL
-        RAISING   zcx_updownci_exception,
-      write_variant
-        IMPORTING ig_data     TYPE data OPTIONAL
-                  iv_testname TYPE sci_tstval-testname
-                  iv_version  TYPE sci_tstval-version
-        RAISING   zcx_updownci_exception,
-      read_variant
-        EXPORTING ei_attributes TYPE REF TO if_ixml_node
-                  ev_testname   TYPE sci_tstval-testname
-                  ev_version    TYPE sci_tstval-version
-        RAISING   zcx_updownci_exception,
-      read_attributes
-        IMPORTING ii_attributes TYPE REF TO if_ixml_node
-        CHANGING  cg_data       TYPE data
-        RAISING   zcx_updownci_exception,
-      render
-        RETURNING VALUE(rv_xml) TYPE string.
 
+    METHODS constructor
+      IMPORTING
+        !iv_xml TYPE string OPTIONAL
+      RAISING
+        zcx_updownci_exception .
+    METHODS write_variant
+      IMPORTING
+        !ig_data     TYPE data OPTIONAL
+        !iv_testname TYPE sci_tstval-testname
+        !iv_version  TYPE sci_tstval-version
+      RAISING
+        zcx_updownci_exception .
+    METHODS read_variant
+      EXPORTING
+        !ei_attributes TYPE REF TO if_ixml_node
+        !ev_testname   TYPE sci_tstval-testname
+        !ev_version    TYPE sci_tstval-version
+      RAISING
+        zcx_updownci_exception .
+    METHODS read_attributes
+      IMPORTING
+        !ii_attributes TYPE REF TO if_ixml_node
+      CHANGING
+        !cg_data       TYPE data
+      RAISING
+        zcx_updownci_exception .
+    METHODS read_description
+      RETURNING
+        VALUE(rv_description) TYPE sci_text.
+    METHODS write_description
+      IMPORTING
+        !iv_description TYPE sci_text.
+    METHODS render
+      RETURNING
+        VALUE(rv_xml) TYPE string .
+  PROTECTED SECTION.
   PRIVATE SECTION.
 
     DATA:
@@ -163,6 +179,16 @@ CLASS ZCL_UPDOWNCI_XML IMPLEMENTATION.
         ii_parent = ii_attributes
       CHANGING
         cg_data   = cg_data ).
+
+  ENDMETHOD.
+
+
+  METHOD read_description.
+
+    DATA: li_element TYPE REF TO if_ixml_element.
+
+    li_element ?= mi_root.
+    rv_description = li_element->get_attribute_ns( 'DESCRIPTION' ).
 
   ENDMETHOD.
 
@@ -406,6 +432,18 @@ CLASS ZCL_UPDOWNCI_XML IMPLEMENTATION.
 
       li_node = li_iterator->get_next( ).
     ENDWHILE.
+
+  ENDMETHOD.
+
+
+  METHOD write_description.
+
+    DATA: li_element TYPE REF TO if_ixml_element,
+          lv_value   TYPE string.
+
+    li_element ?= mi_root.
+    lv_value = iv_description.
+    li_element->set_attribute_ns( name = 'DESCRIPTION' value = lv_value ).
 
   ENDMETHOD.
 
